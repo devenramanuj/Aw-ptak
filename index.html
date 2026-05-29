@@ -412,11 +412,6 @@
       margin-top: 10px;
       text-align: center;
     }
-    .total-stock span {
-      font-size: 18px;
-      font-weight: 800;
-      color: #0d4a3a;
-    }
     .modal {
       position: fixed;
       top: 0;
@@ -549,7 +544,8 @@
 
 <script>
   // ======================== CORRECT PASSWORD (ADMIN) ========================
-  const CORRECT_PASSWORD = "dev6789";  // You can change this password as per requirement
+  // 🔐 તમારો પાસવર્ડ અહીં બદલો - હાલમાં "6789" સેટ છે
+  const CORRECT_PASSWORD = "6789";
   
   // Password screen elements
   const passwordScreen = document.getElementById('passwordScreen');
@@ -568,7 +564,7 @@
       // Initialize main app data after unlock
       initializeApp();
       errorMsgSpan.innerText = '';
-      passwordInput.value = ''; // clear for next time (though screen gone)
+      passwordInput.value = '';
     } else {
       errorMsgSpan.innerText = '❌ ખોટો પાસવર્ડ! ફરી પ્રયાસ કરો.';
       passwordInput.value = '';
@@ -735,4 +731,172 @@
   let calMonth = new Date().getMonth();
   let repYear = new Date().getFullYear();
   let repMonth = new Date().getMonth();
-  let
+  let modalOpen = false;
+  let modalDay = null;
+  let modalTemp = "";
+  
+  function openModal(day) {
+    let dow = new Date(calYear, calMonth, day).getDay();
+    if (dow === 0) {
+      alert("રવિવારે રજા છે, લાભાર્થી ઉમેરી શકાતા નથી");
+      return;
+    }
+    modalOpen = true;
+    modalDay = day;
+    let key = formatKey(calYear, calMonth, day);
+    modalTemp = String(beneficiaries[key] || "");
+    render();
+    setTimeout(() => {
+      let inp = document.getElementById("modalInp");
+      if (inp) inp.focus();
+    }, 60);
+  }
+  function updateModalVal(v) { modalTemp = v; }
+  function saveModal() {
+    let val = parseInt(modalTemp) || 0;
+    let key = formatKey(calYear, calMonth, modalDay);
+    beneficiaries[key] = val;
+    saveAll();
+    modalOpen = false;
+    modalDay = null;
+    modalTemp = "";
+    render();
+  }
+  function closeModal() { modalOpen = false; modalDay = null; modalTemp = ""; render(); }
+  function updateOpeningStock(id, val) { openingStock[id] = parseFloat(val) || 0; saveAll(); render(); }
+  function updateStockIncome(id, val) { stockIncome[id] = parseFloat(val) || 0; saveAll(); render(); }
+  function updateAlertItem(id, val) { stockAlert[id] = parseFloat(val) || 0; saveAll(); render(); }
+  function prevCal() { if (calMonth === 0) { calMonth = 11; calYear--; } else { calMonth--; } render(); }
+  function nextCal() { if (calMonth === 11) { calMonth = 0; calYear++; } else { calMonth++; } render(); }
+  function prevRep() { if (repMonth === 0) { repMonth = 11; repYear--; } else { repMonth--; } render(); }
+  function nextRep() { if (repMonth === 11) { repMonth = 0; repYear++; } else { repMonth++; } render(); }
+  function setTab(tab) { activeTab = tab; render(); }
+  function printReport() { window.print(); }
+  function shareReport() {
+    let today = new Date();
+    let data = getDailyData(today.getFullYear(), today.getMonth(), today.getDate());
+    let text = `📋 દૈનિક રિપોર્ટ\n━━━━━━━━━━━\n📅 ${today.getDate()}/${today.getMonth()+1}/${today.getFullYear()}\n👥 લાભાર્થી: ${data.persons}\n\n`;
+    INVENTORY_ITEMS.forEach(it => {
+      text += `${it.emoji} ${it.guName}: સવાર ${data.items[it.id].morning}g, બપોર ${data.items[it.id].afternoon}g\n`;
+    });
+    if (navigator.share) navigator.share({ text: text });
+    else alert(text);
+  }
+  function monthTotalBen(y, m) {
+    let days = new Date(y, m+1, 0).getDate();
+    let sum = 0;
+    for (let i = 1; i <= days; i++) sum += beneficiaries[formatKey(y, m, i)] || 0;
+    return sum;
+  }
+  function buildCalendar() {
+    let firstDay = new Date(calYear, calMonth, 1).getDay();
+    let daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+    let today = new Date();
+    let cells = [];
+    for (let i = 0; i < firstDay; i++) cells.push({ type: 'empty' });
+    for (let d = 1; d <= daysInMonth; d++) {
+      let dow = new Date(calYear, calMonth, d).getDay();
+      let isToday = (calYear === today.getFullYear() && calMonth === today.getMonth() && d === today.getDate());
+      let key = formatKey(calYear, calMonth, d);
+      cells.push({ type: 'day', day: d, isSunday: dow === 0, isToday: isToday, benCount: beneficiaries[key] || 0 });
+    }
+    return cells;
+  }
+  
+  function render() {
+    let container = document.getElementById("appContainer");
+    if (!container) return;
+    let html = `<div class="container">`;
+    if (activeTab === 0) {
+      let calCells = buildCalendar();
+      let monthTotal = monthTotalBen(calYear, calMonth);
+      html += `<div class="card"><div class="month-nav"><button onclick="window.prevCal()">◀</button><div><strong>${MONTHS[calMonth]} ${calYear}</strong><div style="font-size:9px;">તારીખ ટેપ કરો</div></div><button onclick="window.nextCal()">▶</button></div><div class="total-badge">📊 મહિનાની કુલ લાભાર્થી: ${monthTotal}</div><div class="weekdays">${DAYS.map(d => `<div class="weekday">${d}</div>`).join('')}</div><div class="calendar-days">`;
+      for (let c of calCells) {
+        if (c.type === 'empty') html += `<div class="cal-day empty"></div>`;
+        else if (c.isSunday) html += `<div class="cal-day sunday"><span class="day-number">${c.day}</span><div style="font-size:7px; color:#999;">રજા</div></div>`;
+        else html += `<div class="cal-day" onclick="window.openModal(${c.day})"><span class="day-number ${c.isToday ? 'today' : ''}">${c.day}</span><div class="beneficiary-count">👥 ${c.benCount}</div></div>`;
+      }
+      html += `</div></div>`;
+    }
+    else if (activeTab === 1) {
+      let data = getMonthlyData(repYear, repMonth);
+      html += `<div class="card"><div class="month-nav"><button onclick="window.prevRep()">◀</button><div><strong>${MONTHS[repMonth]} ${repYear}</strong><div style="font-size:9px;">આગળ-પાછળ જુઓ</div></div><button onclick="window.nextRep()">▶</button></div><div class="card-header">📋 વિગતવાર રિપોર્ટ (દરેક વસ્તુની બંધ સિલક)</div><div class="table-wrapper"><table><thead><tr><th class="sticky-date">તારીખ</th><th>વાર</th><th>લાભાર્થી</th>`;
+      INVENTORY_ITEMS.forEach(it => { html += `<th colspan="4" style="background: #2a6e5a;">${it.emoji} ${it.guName}</th>`; });
+      html += `<tr><th class="sticky-date"></th><th></th><th></th>`;
+      INVENTORY_ITEMS.forEach(() => { html += `<th>🌅 સવાર</th><th>🌇 બપોર</th><th>કુલ(g)</th><th>📦 બંધ સિલક(kg)</th>`; });
+      html += `</tr></thead><tbody>`;
+      for (let row of data.rows) {
+        html += `<tr><td class="sticky-date"><strong>${row.day}/${repMonth+1}</strong></td><td>${DAYS[row.dow]}</td><td><strong>${row.persons}</strong></td>`;
+        INVENTORY_ITEMS.forEach(it => {
+          html += `<td>${row.items[it.id].morning}</td><td>${row.items[it.id].afternoon}</td><td><strong>${row.items[it.id].total}</strong><td><td class="closing-col"><strong>${row.closingStock[it.id].toFixed(2)}</strong></td>`;
+        });
+        html += `</tr>`;
+      }
+      html += `<tr class="total-row"><td class="sticky-date" colspan="3"><strong>📊 કુલ ટોટલ</strong></td>`;
+      INVENTORY_ITEMS.forEach(it => {
+        html += `<td><strong>${data.mornTot[it.id]}</strong></td><td><strong>${data.aftTot[it.id]}</strong></td><td><strong>${data.totals[it.id]}</strong><td><td class="closing-col"><strong>${data.finalClosing[it.id].toFixed(2)}</strong></td>`;
+      });
+      html += `</tr></tbody></table></div></div>`;
+    }
+    else if (activeTab === 2) {
+      let data = getMonthlyData(repYear, repMonth);
+      html += `<div class="card"><div class="month-nav"><button onclick="window.prevRep()">◀</button><div><strong>${MONTHS[repMonth]} ${repYear}</strong><div style="font-size:9px;">આગળ-પાછળ</div></div><button onclick="window.nextRep()">▶</button></div><div class="card-header">📈 માસિક સારાંશ (બચત + વપરાશ)</div><div class="summary-grid" style="display:grid; grid-template-columns:1fr; gap:12px; padding:12px;">`;
+      INVENTORY_ITEMS.forEach(it => {
+        let totalStockKg = getTotalStock(it.id);
+        let usedKg = data.totals[it.id] / 1000;
+        let closing = Math.max(0, totalStockKg - usedKg);
+        let isLow = closing < stockAlert[it.id];
+        html += `<div class="summary-item"><div style="font-size:18px; font-weight:800;">${it.emoji} ${it.guName}</div><div style="border-top:1px solid #e2e8f0; margin-top:8px; padding-top:6px;"><div><strong>👥 લાભાર્થી:</strong> 🌅 સવાર ${data.mornBenTot[it.id]} | 🌇 બપોર ${data.aftBenTot[it.id]}</div><div><strong>🍽️ વપરાશ:</strong> સવાર ${data.mornTot[it.id]}g , બપોર ${data.aftTot[it.id]}g</div><div><strong>📦 કુલ ઉપયોગ:</strong> ${data.totals[it.id]}g (${(data.totals[it.id]/1000).toFixed(2)}kg)</div><div style="margin-top:8px; background:#eef3ea; padding:8px; border-radius:12px; text-align:center;"><strong>✅ બચત (બંધ સિલક) :</strong> ${closing.toFixed(2)} kg ${isLow ? '⚠️' : '✔️'}</div></div></div>`;
+      });
+      html += `</div><div style="background:#0d4a3a; margin:12px; padding:14px; border-radius:20px; text-align:center; color:white;"><div>📊 કુલ લાભાર્થી</div><div style="font-size:32px; font-weight:800;">${data.totalPersons}</div><div>કાર્યકારી દિવસો: ${data.rows.filter(r => r.persons > 0 && r.dow !== 0).length}</div></div></div>`;
+    }
+    else if (activeTab === 3) {
+      html += `<div class="card"><div class="card-header">📦 સ્ટોક વ્યવસ્થાપન</div><div class="stock-grid">`;
+      INVENTORY_ITEMS.forEach(it => {
+        let totalStock = getTotalStock(it.id);
+        let isLow = totalStock < stockAlert[it.id];
+        html += `<div class="stock-item"><div class="stock-title">${it.emoji} ${it.guName}</div><div class="stock-row"><label>📦 ઊઘડતી સિલક (કિલો)</label><input type="number" step="0.5" value="${openingStock[it.id]}" onchange="window.updateOpeningStock('${it.id}', this.value)" style="width:110px;"></div><div class="stock-row"><label>📥 આવક (કિલો)</label><input type="number" step="0.5" value="${stockIncome[it.id]}" onchange="window.updateStockIncome('${it.id}', this.value)" style="width:110px;"></div><div class="stock-row"><label>📊 કુલ જથ્થો (કિલો)</label><div class="value-display">${totalStock.toFixed(2)} kg</div></div><div class="stock-row"><label>⚠️ ચેતવણી મર્યાદા (kg)</label><input type="number" step="0.5" value="${stockAlert[it.id]}" onchange="window.updateAlertItem('${it.id}', this.value)" style="width:110px;"></div><div class="total-stock" style="background:${isLow ? '#fff0e0' : '#e0f2e5'}">${isLow ? "⚠️ કુલ સ્ટોક ચેતવણી મર્યાદાથી નીચે" : "✅ કુલ સ્ટોક પર્યાપ્ત"}</div></div>`;
+      });
+      html += `</div></div>`;
+    }
+    if (modalOpen) {
+      let dow = new Date(calYear, calMonth, modalDay).getDay();
+      html += `<div class="modal"><div class="modal-content"><div style="font-size:18px; font-weight:800;">👥 લાભાર્થી સંખ્યા</div><div style="margin:5px 0;">${calYear}/${calMonth+1}/${modalDay} (${DAYS[dow]})</div><input type="number" id="modalInp" value="${modalTemp}" oninput="window.updateModalVal(this.value)" placeholder="વ્યક્તિઓ"><div style="display:flex; gap:10px; justify-content:center;"><button style="background:#0d4a3a; color:white; padding:8px 20px; border-radius:40px;" onclick="window.saveModal()">સાચવો</button><button style="background:#cbd5e1; padding:8px 20px; border-radius:40px;" onclick="window.closeModal()">રદ</button></div></div></div>`;
+    }
+    html += `</div>`;
+    container.innerHTML = html;
+    // sync active tab buttons class
+    document.querySelectorAll('.tab-btn').forEach((btn, idx) => {
+      if (parseInt(btn.getAttribute('data-tab')) === activeTab) btn.classList.add('active');
+      else btn.classList.remove('active');
+    });
+  }
+  
+  function initializeApp() {
+    loadAllData();
+    // attach global functions
+    window.setTab = setTab;
+    window.prevCal = prevCal; window.nextCal = nextCal;
+    window.prevRep = prevRep; window.nextRep = nextRep;
+    window.openModal = openModal; window.updateModalVal = updateModalVal;
+    window.saveModal = saveModal; window.closeModal = closeModal;
+    window.updateOpeningStock = updateOpeningStock; window.updateStockIncome = updateStockIncome;
+    window.updateAlertItem = updateAlertItem;
+    window.printReport = printReport; window.shareReport = shareReport;
+    // tab listeners
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.removeEventListener('click', tabClickHandler);
+      btn.addEventListener('click', tabClickHandler);
+    });
+    document.getElementById('printBtn')?.addEventListener('click', printReport);
+    document.getElementById('shareBtn')?.addEventListener('click', shareReport);
+    render();
+  }
+  function tabClickHandler(e) {
+    let tabVal = parseInt(e.currentTarget.getAttribute('data-tab'));
+    setTab(tabVal);
+  }
+  // start: only after password is entered (but loadAllData inside initializeApp)
+</script>
+</body>
+</html>
